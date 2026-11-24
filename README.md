@@ -1,4 +1,4 @@
-# llama.cpp Provider for DeepSeek Harness
+# Llama.cpp Provider for DeepSeek Harness
 
 English | [中文](docs/DETAIL.zh.md)
 
