@@ -5,12 +5,12 @@
  * llama.cpp when they were not.
  */
 window.__ModuleLoader__.load({
-  id: '@local/dsh-llama-cpp',
+  id: 'dsh-llama-cpp-provider',
   factory(require) {
     const React = require('react')
     const h = React.createElement
 
-    const PKG = '@local/dsh-llama-cpp'
+    const PKG = 'dsh-llama-cpp-provider'
     const ROUTE = 'llama.dsh'
     const PI_AI_NS = 'llm-pi-ai'
     const NS = 'llama-cpp'

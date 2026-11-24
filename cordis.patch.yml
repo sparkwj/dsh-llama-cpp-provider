@@ -2,7 +2,7 @@
 # entry under Settings > Models > Add model provider.
 - insert:
     - id: llama-cpp-server
-      name: '@local/dsh-llama-cpp'
+      name: 'dsh-llama-cpp-provider'
       config:
         modelsMax: 1
         extraArgs: []
