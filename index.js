@@ -137,6 +137,20 @@ function offerProvider(ctx, config, baseURL) {
     }
   }
 
+  // The local server's model ids, used when a saved profile lists none.
+  let serverModels = []
+  const loadServerModels = async () => {
+    for (let i = 0; i < 30 && !serverModels.length; i++) {
+      try {
+        const res = await fetch(`${baseURL}/models`, { signal: AbortSignal.timeout(2000) })
+        const body = await res.json()
+        serverModels = (body?.data ?? []).map(m => m?.id).filter(Boolean)
+      } catch {}
+      if (!serverModels.length) await new Promise(r => setTimeout(r, 2000))
+    }
+  }
+  loadServerModels().catch(() => {})
+
   const piAiFiber = fiber => {
     const entry = fiber?.entry
     return entry?.options?.id === piAiEntryId || entry?.options?.name === PI_AI_NAME
@@ -192,7 +206,11 @@ function offerProvider(ctx, config, baseURL) {
         const hdrs = (profile && profile.headers) || {}
         const hasAuthHeader = Object.keys(hdrs).some(k => k.toLowerCase() === 'authorization')
         const needsKey = profile && typeof profile === 'object' && !profile.apiKeyEnv && !hasAuthHeader
-        if (profile && typeof profile === 'object' && (!profile.baseURL || !profile.api || !profile.displayName || needsKey)) {
+        // pi-ai has no catalog for this route, so a profile saved without a
+        // model list fails validation; fall back to the server's own list.
+        const noModels = !!(profile && typeof profile === 'object'
+          && !(Array.isArray(profile.models) && profile.models.length) && serverModels.length)
+        if (profile && typeof profile === 'object' && (!profile.baseURL || !profile.api || !profile.displayName || needsKey || noModels)) {
           raw = {
             ...raw,
             providers: {
@@ -201,6 +219,7 @@ function offerProvider(ctx, config, baseURL) {
                 ...profile,
                 displayName: profile.displayName || DISPLAY_NAME,
                 api: profile.api || 'openai-completions',
+                ...(noModels ? { models: serverModels.map(id => ({ id, name: id })) } : {}),
                 baseURL: profile.baseURL || baseURL,
                 ...(needsKey ? { headers: { ...hdrs, authorization: `Bearer ${config.apiKey || 'llama-local'}` } } : {}),
               },
@@ -210,6 +229,21 @@ function offerProvider(ctx, config, baseURL) {
       } else queueMicrotask(() => { if (!configured()) offer() })
     }
     return raw
+  })
+
+  // internal/config is a waterfall: earlier listeners wrap later ones, and
+  // pi-ai validates what its next() returns. When pi-ai's listener was added
+  // after this one (pi-ai reloaded after this plugin started), it validated
+  // before this listener filled in api/models. Keep this listener last.
+  const keepLast = () => {
+    const hooks = ctx.events?._hooks?.['internal/config']
+    if (!Array.isArray(hooks)) return
+    const i = hooks.findIndex(h => h?.ctx?.fiber === ctx.fiber)
+    if (i >= 0 && i !== hooks.length - 1) hooks.push(hooks.splice(i, 1)[0])
+  }
+  keepLast()
+  ctx.on('internal/listener', (name) => {
+    if (name === 'internal/config') queueMicrotask(keepLast)
   })
 
   if (configured()) return
