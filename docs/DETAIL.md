@@ -8,9 +8,9 @@ Llama.cpp makes local models feel like any other model in DSH. It's ready the mo
 
 Install llama.cpp.
 
-- **macOS**: Open Terminal and run
+- **macOS**: Open Terminal and run  
   `curl -LsSf https://llama.app/install.sh | sh`
-- **Windows**: Open PowerShell and run
+- **Windows**: Open PowerShell and run  
   `irm https://llama.app/install.ps1 | iex`
 
 When it's done, reopen DSH.
