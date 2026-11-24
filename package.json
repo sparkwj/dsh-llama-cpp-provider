@@ -40,6 +40,6 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sparkwj/dsh-llama-cpp.git"
+    "url": "git+https://github.com/sparkwj/dsh-llama-cpp-provider.git"
   }
 }
