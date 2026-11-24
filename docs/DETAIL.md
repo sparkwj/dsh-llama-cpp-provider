@@ -1,6 +1,6 @@
 ![Llama.cpp in DSH](preview.png)
 
-## The models on your computer. Right inside DSH.
+## The models on your computer. Right inside DeepSeek Harness.
 
 Llama.cpp makes local models feel like any other model in DSH. It's ready the moment DSH opens, and it quits when DSH does. No internet. No keys. Your conversations stay on this computer.
 

@@ -1,6 +1,6 @@
 ![DSH 中的 Llama.cpp](preview.png)
 
-## 在 DSH 里，直接用你电脑上的模型。
+## 在 DeepSeek Harness 里，直接用你电脑上的模型。
 
 Llama.cpp 让本地模型像其他模型一样，在 DSH 中随选随用。打开 DSH，它就已经就绪；关掉 DSH，它也随之退出。无需联网，无需密钥，你的对话只留在这台电脑上。
 
