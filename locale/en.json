@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Llama.cpp",
+    "description": "Starts a local llama.cpp server with DSH and adds a Llama.cpp provider under Settings → Models.",
+    "detail": "docs/DETAIL.md"
+  }
+}

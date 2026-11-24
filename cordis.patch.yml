@@ -1,0 +1,12 @@
+# Starts `llama serve` (router mode) when DSH boots and offers a llama.cpp
+# entry under Settings > Models > Add model provider.
+- insert:
+    - id: llama-cpp-server
+      name: '@local/dsh-llama-cpp'
+      config:
+        modelsMax: 1
+        extraArgs: []
+        autostart: true
+        # Offer llama.cpp under Models > Add model provider until it is configured.
+        offerProvider: true
+        piAiEntryId: llm-pi-ai
