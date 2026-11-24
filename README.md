@@ -1,6 +1,44 @@
 # Llama.cpp for DSH
 
-Use the models on your computer, right inside DSH.
+English | [中文](docs/DETAIL.zh.md)
 
-- English: [docs/DETAIL.md](docs/DETAIL.md)
-- 中文：[docs/DETAIL.zh.md](docs/DETAIL.zh.md)
+![Llama.cpp in DSH](docs/preview.png)
+
+## The models on your computer. Right inside DSH.
+
+Llama.cpp makes local models feel like any other model in DSH. It's ready the moment DSH opens, and it quits when DSH does. No internet. No keys. Your conversations stay on this computer.
+
+## Before you begin
+
+Install llama.cpp.
+
+- **macOS**: Open Terminal and run
+  `curl -LsSf https://llama.app/install.sh | sh`
+- **Windows**: Open PowerShell and run
+  `irm https://llama.app/install.ps1 | iex`
+
+When it's done, reopen DSH.
+
+## Install the plugin
+
+1. Download this repository:
+   `git clone https://github.com/sparkwj/dsh-llama-cpp.git`
+2. In DSH, go to Plugins, click Add plugin, and choose the `dsh-llama-cpp` folder.
+
+## Add Llama.cpp
+
+1. Go to Settings > Models, then click Add model provider.
+2. Under Third-party model provider, choose **Llama.cpp**.
+3. Click Fetch available models, then click Save.
+
+That's it. Choose a model under Llama.cpp in any session and start chatting.
+
+## Tips
+
+- When you add or edit Llama.cpp, its card shows whether llama.cpp is ready. If it isn't installed yet, the card tells you what to do.
+- Want to tune a model? Edit llama.cpp's `models.user.ini` file, and Llama.cpp picks it up automatically.
+- No green dot next to Llama.cpp? That's expected — local models don't need an API key.
+
+## License
+
+[MIT](LICENSE)
