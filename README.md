@@ -21,9 +21,7 @@ When it's done, reopen DSH.
 
 ## Install the plugin
 
-1. Download this repository:
-   `git clone https://github.com/sparkwj/dsh-llama-cpp.git`
-2. In DSH, go to Plugins, click Add plugin, and choose the `dsh-llama-cpp` folder.
+In DSH, go to Plugins, click Add plugin, and install the npm package `dsh-llama-cpp`.
 
 ## Add Llama.cpp
 
