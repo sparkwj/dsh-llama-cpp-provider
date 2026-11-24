@@ -27,4 +27,4 @@ Llama.cpp 让本地模型像其他模型一样，在 DSH 中随选随用。打�
 
 - 添加或编辑 Llama.cpp 时，卡片上会告诉你 llama.cpp 是否已就绪。如果还没安装，这里也会告诉你该怎么做。
 - 想调整模型参数？编辑 llama.cpp 的 `models.user.ini` 文件即可，Llama.cpp 会自动读取。
-- Llama.cpp 卡片旁没有绿点，这很正常——本地模型不需要 API 密钥。
+- 安装插件后，如果在「第三方模型供应商」里找不到 Llama.cpp，请重新打开 DSH。

@@ -27,4 +27,4 @@ That's it. Choose a model under Llama.cpp in any session and start chatting.
 
 - When you add or edit Llama.cpp, its card shows whether llama.cpp is ready. If it isn't installed yet, the card tells you what to do.
 - Want to tune a model? Edit llama.cpp's `models.user.ini` file, and Llama.cpp picks it up automatically.
-- No green dot next to Llama.cpp? That's expected — local models don't need an API key.
+- Don't see Llama.cpp under Third-party model provider after installing the plugin? Reopen DSH.
