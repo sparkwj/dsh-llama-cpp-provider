@@ -16,7 +16,7 @@ function locate(configured, detect) {
   return found ? { path: found, source: 'auto', exists: true } : { path: '', source: 'none', exists: false }
 }
 
-/** Read-only facts the Models card shows under Llama.cpp. */
+/** Read-only facts the Models card shows under llama.cpp. */
 function makeInfoService(getConfig) {
   class LlamaCppInfo extends TypertRemoteService {
     constructor(ctx) { super(ctx, REMOTE_NS) }
@@ -55,7 +55,7 @@ const val = (config, key) => {
 const ROUTE = 'llama.dsh'
 const HOST = '127.0.0.1'
 const PORT = 19931
-const DISPLAY_NAME = 'Llama.cpp'
+const DISPLAY_NAME = 'llama.cpp'
 const PI_AI_NAME = '@deepseek-ai/dsh-llm-pi-ai'
 
 function isExecutable(file) {

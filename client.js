@@ -1,5 +1,5 @@
 /**
- * Llama.cpp — browser half. Shows read-only notes on the Llama.cpp card in
+ * llama.cpp — browser half. Shows read-only notes on the llama.cpp card in
  * Settings > Models (while adding it, or while its editor is open): where
  * the llama executable and models-preset file were found, or how to install
  * llama.cpp when they were not.
@@ -18,7 +18,7 @@ window.__ModuleLoader__.load({
     const INSTALL_URL = 'https://github.com/ggml-org/llama.cpp#quick-start'
 
     const zh = {
-      title: 'Llama.cpp 本地服务',
+      title: 'llama.cpp 本地服务',
       binary: 'llama 命令',
       preset: 'models-preset 文件',
       auto: '已自动找到：{path}',
@@ -32,7 +32,7 @@ window.__ModuleLoader__.load({
       guide: '官方教程',
     }
     const en = {
-      title: 'Llama.cpp local server',
+      title: 'llama.cpp local server',
       binary: 'llama executable',
       preset: 'models-preset file',
       auto: 'Found automatically: {path}',
