@@ -4,8 +4,6 @@
     - id: llama-cpp-server
       name: 'dsh-llama-cpp-provider'
       config:
-        modelsMax: 1
-        extraArgs: []
         autostart: true
         # Offer llama.cpp under Models > Add model provider until it is configured.
         offerProvider: true

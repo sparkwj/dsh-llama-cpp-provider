@@ -48,8 +48,6 @@ function makeInfoService(getConfig) {
 const isWin = process.platform === 'win32'
 
 export const Config = z.object({
-  modelsMax: z.number(),
-  extraArgs: z.array(z.string()).default([]),
   autostart: z.boolean().default(true),
   offerProvider: z.boolean().default(true),
   piAiEntryId: z.string().default('llm-pi-ai'),
@@ -302,10 +300,10 @@ export function apply(ctx, config = {}) {
     // The unified `llama` CLI takes a subcommand; `llama-server` does not.
     if (/^llama(\.exe)?$/i.test(basename(binary))) args.push('serve')
     args.push('--host', host, '--port', String(port))
+    // One model loaded at a time, unless the user set LLAMA_ARG_MODELS_MAX.
+    if (!process.env.LLAMA_ARG_MODELS_MAX?.trim()) args.push('--models-max', '1')
     // When the preset came from LLAMA_ARG_MODELS_PRESET, llama-server reads it itself.
     if (preset && !process.env.LLAMA_ARG_MODELS_PRESET?.trim()) args.push('--models-preset', preset)
-    if (config.modelsMax !== undefined) args.push('--models-max', String(config.modelsMax))
-    if (Array.isArray(config.extraArgs)) args.push(...config.extraArgs.map(String))
 
     ctx.logger.info(`llama.cpp: starting ${binary} ${args.join(' ')}`)
     // An invalid LLAMA_ARG_MODELS_PRESET would stop llama-server from starting:
