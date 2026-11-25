@@ -21,7 +21,9 @@ window.__ModuleLoader__.load({
       title: 'llama.cpp 本地服务',
       binary: 'llama 命令',
       preset: 'models-preset 文件',
-      auto: '已自动找到：{path}',
+      auto: '已找到：{path}',
+      env: '由 {name} 指定：{path}',
+      envMissing: '{name} 指向的文件不存在：{path}',
       binaryNone: '没有找到 llama 命令。请按 llama.cpp 官方教程安装：',
       binaryInstallMac: 'macOS / Linux：curl -LsSf https://llama.app/install.sh | sh',
       binaryInstallWin: 'Windows（PowerShell）：irm https://llama.app/install.ps1 | iex',
@@ -35,7 +37,9 @@ window.__ModuleLoader__.load({
       title: 'llama.cpp local server',
       binary: 'llama executable',
       preset: 'models-preset file',
-      auto: 'Found automatically: {path}',
+      auto: 'Found: {path}',
+      env: 'Set by {name}: {path}',
+      envMissing: 'The file {name} points to does not exist: {path}',
       binaryNone: 'No llama executable was found. Install llama.cpp by following the official guide:',
       binaryInstallMac: 'macOS / Linux: curl -LsSf https://llama.app/install.sh | sh',
       binaryInstallWin: 'Windows (PowerShell): irm https://llama.app/install.ps1 | iex',
@@ -71,6 +75,8 @@ window.__ModuleLoader__.load({
     function PathLine({ label, item, none, t }) {
       let body
       if (item.source === 'auto') body = h('span', { style: code }, fill(t('auto'), { path: item.path }))
+      else if (item.source === 'env' && item.exists) body = h('span', { style: code }, fill(t('env'), { name: item.env, path: item.path }))
+      else if (item.source === 'env') body = h('span', { style: { ...code, color: 'var(--dsw-color-danger, #d33)' } }, fill(t('envMissing'), { name: item.env, path: item.path }))
       else if (item.source === 'config' && item.exists) body = h('span', { style: code }, fill(t('config'), { path: item.path }))
       else if (item.source === 'config') body = h('span', { style: { ...code, color: 'var(--dsw-color-danger, #d33)' } }, fill(t('configMissing'), { path: item.path }))
       else body = none

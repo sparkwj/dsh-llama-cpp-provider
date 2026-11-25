@@ -35,6 +35,9 @@ That's it. Choose a model under llama.cpp in any session and start chatting.
 
 - When you add or edit llama.cpp, its card shows whether llama.cpp is ready. If it isn't installed yet, the card tells you what to do.
 - Want to tune a model? Edit llama.cpp's `models.user.ini` file, and llama.cpp picks it up automatically.
+- The plugin automatically finds llama.cpp already installed on your system. To use a different `llama-server` (or `llama`), set the `LLAMA_SERVER_PATH` environment variable to its full path, then reopen DSH. The card shows which file is in use.
+- Keep models in another folder? Set the `LLAMA_ARG_MODELS_DIR` environment variable to that folder, then reopen DSH. Its models show up alongside the ones you have downloaded.
+- Want a different model preset file? Set the `LLAMA_ARG_MODELS_PRESET` environment variable to its full path, then reopen DSH. It is used instead of `models.user.ini`.
 - Don't see llama.cpp under Third-party model provider after installing the plugin? Reopen DSH.
 - Want a green dot next to llama.cpp? Enter any API key on its card. Local models don't need one, so llama.cpp works either way.
 

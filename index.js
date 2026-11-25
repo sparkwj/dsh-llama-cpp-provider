@@ -16,6 +16,15 @@ function locate(configured, detect) {
   return found ? { path: found, source: 'auto', exists: true } : { path: '', source: 'none', exists: false }
 }
 
+/** If the env var is set, report it (and whether it points to a real file); else auto-detect. */
+function locateEnv(name, detect) {
+  const p = process.env[name]?.trim()
+  if (!p) return locate('', detect)
+  let isFile = false
+  try { isFile = statSync(p).isFile() } catch {}
+  return { path: p, source: 'env', env: name, exists: isFile }
+}
+
 /** Read-only facts the Models card shows under llama.cpp. */
 function makeInfoService(getConfig) {
   class LlamaCppInfo extends TypertRemoteService {
@@ -24,8 +33,8 @@ function makeInfoService(getConfig) {
       const config = getConfig()
       return {
         platform: process.platform,
-        binary: locate('', detectBinary),
-        preset: locate('', detectPreset),
+        binary: locateEnv('LLAMA_SERVER_PATH', detectBinary),
+        preset: locateEnv('LLAMA_ARG_MODELS_PRESET', detectPreset),
       }
     }
   }
@@ -64,6 +73,10 @@ function isExecutable(file) {
 
 /** Find llama-server or llama on PATH, then in common install dirs. */
 export function detectBinary() {
+  // An explicit path wins over everything else.
+  const override = process.env.LLAMA_SERVER_PATH?.trim()
+  // Set but invalid: don't fall back, so the card and the running server agree.
+  if (override) return isExecutable(override) ? override : undefined
   const names = isWin ? ['llama-server.exe', 'llama.exe'] : ['llama-server', 'llama']
   const dirs = [
     ...(process.env.PATH ?? '').split(delimiter).filter(Boolean),
@@ -84,6 +97,9 @@ export function detectBinary() {
 }
 
 export function detectPreset() {
+  // A user-set LLAMA_ARG_MODELS_PRESET wins; llama-server reads it itself.
+  const override = process.env.LLAMA_ARG_MODELS_PRESET?.trim()
+  if (override) return override
   const candidates = [
     join(homedir(), '.config', 'llama', 'models.user.ini'),
     // Llama for Windows (ggml-org/Llama-Windows UserModelOverrides.cs):
@@ -286,12 +302,25 @@ export function apply(ctx, config = {}) {
     // The unified `llama` CLI takes a subcommand; `llama-server` does not.
     if (/^llama(\.exe)?$/i.test(basename(binary))) args.push('serve')
     args.push('--host', host, '--port', String(port))
-    if (preset) args.push('--models-preset', preset)
+    // When the preset came from LLAMA_ARG_MODELS_PRESET, llama-server reads it itself.
+    if (preset && !process.env.LLAMA_ARG_MODELS_PRESET?.trim()) args.push('--models-preset', preset)
     if (config.modelsMax !== undefined) args.push('--models-max', String(config.modelsMax))
     if (Array.isArray(config.extraArgs)) args.push(...config.extraArgs.map(String))
 
     ctx.logger.info(`llama.cpp: starting ${binary} ${args.join(' ')}`)
-    child = spawn(binary, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+    // An invalid LLAMA_ARG_MODELS_PRESET would stop llama-server from starting:
+    // drop it so the server starts with default settings (the card flags it in red).
+    const env = { ...process.env }
+    const envPreset = env.LLAMA_ARG_MODELS_PRESET?.trim()
+    if (envPreset) {
+      let ok = false
+      try { ok = statSync(envPreset).isFile() } catch {}
+      if (!ok) {
+        delete env.LLAMA_ARG_MODELS_PRESET
+        ctx.logger.warn(`llama.cpp: LLAMA_ARG_MODELS_PRESET file not found (${envPreset}); starting without a preset`)
+      }
+    }
+    child = spawn(binary, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, env })
     const relay = chunk => {
       for (const line of String(chunk).split(/\r?\n/)) if (line.trim()) ctx.logger.debug(`llama.cpp: ${line}`)
     }

@@ -27,5 +27,8 @@ llama.cpp 让本地模型像其他模型一样，在 DSH 中随选随用。打�
 
 - 添加或编辑 llama.cpp 时，卡片上会告诉你 llama.cpp 是否已就绪。如果还没安装，这里也会告诉你该怎么做。
 - 想调整模型参数？编辑 llama.cpp 的 `models.user.ini` 文件即可，llama.cpp 会自动读取。
+- 插件会自动查找系统中已安装的 llama.cpp。想用别的 `llama-server`（或 `llama`），把环境变量 `LLAMA_SERVER_PATH` 设为它的完整路径，再重新打开 DSH。卡片上会显示当前用的是哪个文件。
+- 模型放在别的文件夹？把环境变量 `LLAMA_ARG_MODELS_DIR` 设为这个文件夹，再重新打开 DSH。里面的模型会和已下载的模型一起显示。
+- 想用别的模型预设文件？把环境变量 `LLAMA_ARG_MODELS_PRESET` 设为它的完整路径，再重新打开 DSH。插件会改用它，不再读取 `models.user.ini`。
 - 安装插件后，如果在「第三方模型供应商」里找不到 llama.cpp，请重新打开 DSH。
 - 想让 llama.cpp 卡片旁亮起绿点？在卡片上随便填一个 API 密钥即可。本地模型并不需要密钥，填不填都能正常使用。
