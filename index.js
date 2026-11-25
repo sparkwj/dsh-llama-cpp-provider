@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
-import { existsSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, statSync, watch } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, delimiter, join } from 'node:path'
+import { basename, delimiter, dirname, join } from 'node:path'
 
 import z from '@deepseek-ai/schemastery'
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -333,9 +333,57 @@ export function apply(ctx, config = {}) {
     })
   }
 
+  // Watch the preset file and ask the router to re-read it in place
+  // (GET /models?reload=1, what Llama.app does when its menu opens).
+  // Watches the folder, not the file: editors often save by replacing it.
+  const watchPreset = () => {
+    const file = detectPreset()
+    if (!file) return () => {}
+    const dir = dirname(file), name = basename(file)
+    const read = () => { try { return readFileSync(file, 'utf8') } catch { return undefined } }
+    let last = read()
+    let timer, busy = false, again = false
+    const reload = async () => {
+      if (busy) { again = true; return }
+      const text = read()
+      if (text === undefined) {
+        ctx.logger.warn(`llama.cpp: ${file} is missing; keeping the current model list`)
+        return
+      }
+      if (text === last) return
+      busy = true
+      try {
+        if (!(await healthy(host, port))) return // not running: it reads the file on next start
+        const res = await fetch(`http://${host}:${port}/models?reload=1`, { signal: AbortSignal.timeout(10000) })
+        if (res.ok) { last = text; ctx.logger.info(`llama.cpp: reloaded model list from ${file}`) }
+        else ctx.logger.warn(`llama.cpp: model reload failed (HTTP ${res.status})`)
+      } catch (err) {
+        ctx.logger.warn(`llama.cpp: model reload failed: ${err?.message ?? err}`)
+      } finally {
+        busy = false
+        if (again) { again = false; reload() }
+      }
+    }
+    let watcher
+    try {
+      watcher = watch(dir, (_event, f) => {
+        if (f && String(f) !== name) return
+        clearTimeout(timer)
+        timer = setTimeout(reload, 300) // debounce: one save can fire several events
+      })
+      watcher.on('error', err => ctx.logger.debug(`llama.cpp: preset watch error: ${err?.message ?? err}`))
+    } catch (err) {
+      ctx.logger.debug(`llama.cpp: cannot watch ${dir}: ${err?.message ?? err}`)
+      return () => {}
+    }
+    return () => { clearTimeout(timer); watcher.close() }
+  }
+
   ctx.effect(() => {
     start().catch(err => ctx.logger.error(err))
+    const unwatch = watchPreset()
     return () => {
+      unwatch()
       stopped = true
       if (child && child.exitCode === null) {
         const c = child
