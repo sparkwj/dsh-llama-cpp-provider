@@ -9,6 +9,45 @@ import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 const REMOTE_NS = 'llamaCpp'
 const LOG_FILE = join(homedir(), '.dsh', 'llama-cpp', 'llama-server.log')
 const SETTINGS_FILE = join(homedir(), '.dsh', 'llama-cpp', 'settings.json')
+// PID of the llama-server we started. On POSIX it leads its own process group,
+// so the router and the model instances it spawns are stopped together, and a
+// server left over from an earlier run (DSH killed, plugin removed) is found.
+const PID_FILE = join(homedir(), '.dsh', 'llama-cpp', 'server.pid')
+const WIN = process.platform === 'win32'
+
+function treeAlive(pid) {
+  try { process.kill(WIN ? pid : -pid, 0); return true } catch (e) { return e?.code === 'EPERM' }
+}
+
+function killTree(pid, sig) {
+  if (!pid) return
+  if (WIN) {
+    try { spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }).on('error', () => {}) } catch {}
+    return
+  }
+  try { process.kill(-pid, sig) } catch { try { process.kill(pid, sig) } catch {} }
+}
+
+function readPid() {
+  try { const n = parseInt(readFileSync(PID_FILE, 'utf8'), 10); return n > 0 ? n : undefined } catch { return undefined }
+}
+
+function clearPid(pid) {
+  if (pid !== undefined && readPid() !== pid) return
+  try { unlinkSync(PID_FILE) } catch {}
+}
+
+// Stop a llama-server tree recorded by an earlier run, then wait for it to go.
+async function killStale(logger) {
+  const pid = readPid()
+  if (!pid) return
+  if (!treeAlive(pid)) { clearPid(pid); return }
+  logger.info(`llama.cpp: stopping llama-server left over from an earlier run (pid ${pid})`)
+  killTree(pid, 'SIGTERM')
+  for (let i = 0; i < 50 && treeAlive(pid); i++) await new Promise(r => setTimeout(r, 100))
+  if (treeAlive(pid)) killTree(pid, 'SIGKILL')
+  clearPid(pid)
+}
 /** The llama.cpp folder (or executable) picked on the detail page, if any. */
 function readCustom() {
   try { const v = JSON.parse(readFileSync(SETTINGS_FILE, 'utf8')).llamaPath; return typeof v === 'string' && v.trim() ? v.trim() : undefined } catch { return undefined }
@@ -393,6 +432,8 @@ export function apply(ctx, config = {}) {
   let stopped = false
 
   const start = async () => {
+    if (stopped) return
+    await killStale(ctx.logger)
     if (await healthy(host, port)) {
       ctx.logger.info(`llama.cpp: server already running at ${host}:${port}, reusing it`)
       return
@@ -428,7 +469,11 @@ export function apply(ctx, config = {}) {
     }
     const log = openServerLog(ctx.logger)
     log?.write(`=== ${new Date().toISOString()} starting ${binary} ${args.join(' ')}\n`)
-    child = spawn(binary, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, env })
+    child = spawn(binary, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, env, detached: !WIN })
+    const pid = child.pid
+    if (pid) {
+      try { mkdirSync(dirname(PID_FILE), { recursive: true }); writeFileSync(PID_FILE, String(pid) + '\n') } catch {}
+    }
     const relay = chunk => {
       log?.write(chunk)
       for (const line of String(chunk).split(/\r?\n/)) {
@@ -444,6 +489,9 @@ export function apply(ctx, config = {}) {
     child.on('exit', (code, signal) => {
       if (!stopped) ctx.logger.warn(`llama.cpp: server exited (code ${code}, signal ${signal}); see ${LOG_FILE}`)
       log?.end(`=== ${new Date().toISOString()} exited (code ${code}, signal ${signal})\n`)
+      // Instances the router spawned may outlive it: stop the rest of the group.
+      if (pid && treeAlive(pid)) killTree(pid, 'SIGTERM')
+      if (pid && !treeAlive(pid)) clearPid(pid)
       child = undefined
     })
   }
@@ -504,7 +552,7 @@ export function apply(ctx, config = {}) {
     const c = child
     if (c && c.exitCode === null) {
       c.once('exit', () => { if (!stopped) start().catch(err => ctx.logger.error(err)) })
-      c.kill('SIGTERM')
+      killTree(c.pid, 'SIGTERM')
     } else start().catch(err => ctx.logger.error(err))
   }
 
@@ -516,20 +564,25 @@ export function apply(ctx, config = {}) {
     if (c && c.exitCode === null) {
       ctx.logger.info(`llama.cpp: created ${file}; restarting llama-server`)
       c.once('exit', () => { if (!stopped) start().catch(err => ctx.logger.error(err)) })
-      c.kill('SIGTERM')
+      killTree(c.pid, 'SIGTERM')
     } else ctx.logger.warn(`llama.cpp: created ${file}; restart DSH so llama-server reads it`)
   }
+
+  // Last resort when DSH quits without disposing plugins.
+  const onExit = () => { if (child && child.exitCode === null) killTree(child.pid, 'SIGTERM') }
+  process.once('exit', onExit)
 
   ctx.effect(() => {
     start().catch(err => ctx.logger.error(err))
     unwatch = watchPreset()
     return () => {
+      process.removeListener('exit', onExit)
       unwatch()
       stopped = true
       if (child && child.exitCode === null) {
         const c = child
-        c.kill('SIGTERM')
-        setTimeout(() => { if (c.exitCode === null) c.kill('SIGKILL') }, 5000).unref?.()
+        killTree(c.pid, 'SIGTERM')
+        setTimeout(() => { if (c.exitCode === null) { killTree(c.pid, 'SIGKILL'); clearPid(c.pid) } }, 5000).unref?.()
       }
     }
   })
