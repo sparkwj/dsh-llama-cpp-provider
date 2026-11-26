@@ -421,8 +421,8 @@ window.__ModuleLoader__.load({
           else if (state.kind === 'failed') status = fill(t('presetSaveFailed'), { error: state.error })
           return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
             h('textarea', {
-              value: text, spellCheck: false, onKeyDown, onChange: e => setText(e.target.value), rows: 16,
-              style: { ...code, wordBreak: 'normal', whiteSpace: 'pre', width: '100%', boxSizing: 'border-box', resize: 'vertical', padding: 10, borderRadius: 6,
+              value: text, spellCheck: false, onKeyDown, onChange: e => setText(e.target.value),
+              style: { ...code, height: 360, minHeight: 120, wordBreak: 'normal', whiteSpace: 'pre', width: '100%', boxSizing: 'border-box', resize: 'vertical', padding: 10, borderRadius: 6,
                 color: 'inherit', background: 'var(--dsw-color-bg-subtle, rgba(127,127,127,.08))', border: '1px solid var(--dsw-color-border, rgba(127,127,127,.25))' },
             }),
             disk !== null ? h('div', { style: { ...muted, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--dsw-color-warning, #b26b00)' } },
