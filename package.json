@@ -1,6 +1,6 @@
 {
   "name": "dsh-llama-cpp-provider",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "type": "module",
   "description": "Starts llama.cpp's server with DSH and adds a llama.cpp model provider.",
   "exports": {
