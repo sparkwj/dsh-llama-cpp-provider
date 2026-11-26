@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { existsSync, readFileSync, statSync, watch } from 'node:fs'
+import { createWriteStream, existsSync, mkdirSync, readFileSync, statSync, watch, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, delimiter, dirname, join } from 'node:path'
 
@@ -7,6 +7,19 @@ import z from '@deepseek-ai/schemastery'
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 
 const REMOTE_NS = 'llamaCpp'
+const LOG_FILE = join(homedir(), '.dsh', 'llama-cpp', 'llama-server.log')
+
+/** Open the server log, replacing the previous run's output. */
+function openServerLog(logger) {
+  try {
+    mkdirSync(dirname(LOG_FILE), { recursive: true })
+    const stream = createWriteStream(LOG_FILE, { flags: 'w' })
+    stream.on('error', err => logger.debug(`llama.cpp: log file error: ${err?.message ?? err}`))
+    return stream
+  } catch (err) {
+    logger.debug(`llama.cpp: cannot open ${LOG_FILE}: ${err?.message ?? err}`)
+  }
+}
 const REMOTE_METHOD_DESCRIPTOR = '@deepseek-ai/dsh-typert-protocol/remote-methods'
 
 /** Where a path came from, so the Models card can explain it. */
@@ -25,8 +38,13 @@ function locateEnv(name, detect) {
   return { path: p, source: 'env', env: name, exists: isFile }
 }
 
+/** Where llama.cpp looks for models.user.ini by default (created on first save). */
+function defaultPresetPath() {
+  return process.platform === 'win32' ? join(homedir(), '.llama', 'models.user.ini') : join(homedir(), '.config', 'llama', 'models.user.ini')
+}
+
 /** Read-only facts the Models card shows under llama.cpp. */
-function makeInfoService(getConfig) {
+function makeInfoService(getConfig, onCreated) {
   class LlamaCppInfo extends TypertRemoteService {
     constructor(ctx) { super(ctx, REMOTE_NS) }
     getInfo() {
@@ -37,10 +55,41 @@ function makeInfoService(getConfig) {
         preset: locateEnv('LLAMA_ARG_MODELS_PRESET', detectPreset),
       }
     }
+    /** The models-preset file the server uses (the one the watcher follows). */
+    readPreset() {
+      const env = process.env.LLAMA_ARG_MODELS_PRESET?.trim()
+      const file = env || detectPreset() || defaultPresetPath()
+      let text = '', exists = false
+      try { text = readFileSync(file, 'utf8'); exists = true } catch {}
+      return { path: file, exists, envMissing: !!env && !exists, text }
+    }
+    /** Save the preset; the file watcher then reloads the model list. */
+    writePreset(text) {
+      if (typeof text !== 'string') return { ok: false, error: 'text must be a string' }
+      const env = process.env.LLAMA_ARG_MODELS_PRESET?.trim()
+      const file = env || detectPreset() || defaultPresetPath()
+      const created = !existsSync(file)
+      if (env && created) return { ok: false, error: `LLAMA_ARG_MODELS_PRESET file not found: ${file}` }
+      try { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, text, 'utf8') }
+      catch (err) { return { ok: false, error: String(err?.message ?? err) } }
+      if (created) onCreated?.(file)
+      return { ok: true, path: file, created }
+    }
+    /** The last 200 lines of this run's llama-server output. */
+    readLog() {
+      try {
+        const st = statSync(LOG_FILE)
+        const lines = readFileSync(LOG_FILE, 'utf8').split(/\r?\n/)
+        const max = 200
+        return { path: LOG_FILE, exists: true, mtime: st.mtimeMs, truncated: lines.length > max, text: lines.slice(-max).join('\n') }
+      } catch {
+        return { path: LOG_FILE, exists: false, text: '' }
+      }
+    }
   }
   Object.defineProperty(LlamaCppInfo.prototype, REMOTE_METHOD_DESCRIPTOR, {
     configurable: true,
-    value: Object.freeze({ version: 1, methods: Object.freeze([Object.freeze({ method: 'getInfo', invocation: Object.freeze({ kind: 'direct' }) })]) }),
+    value: Object.freeze({ version: 1, methods: Object.freeze([Object.freeze({ method: 'getInfo', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'readLog', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'readPreset', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'writePreset', invocation: Object.freeze({ kind: 'direct' }) })]) }),
   })
   return LlamaCppInfo
 }
@@ -272,7 +321,7 @@ export function apply(ctx, config = {}) {
   const baseURL = `http://${host}:${port}/v1`
 
   // Read-only Remote the Models card uses to show where llama was found.
-  ctx.plugin(makeInfoService(() => config))
+  ctx.plugin(makeInfoService(() => config, file => presetCreated(file)))
 
   // At boot the llm service may not exist yet; wait for it instead of
   // reading it once (which silently skipped the offer after a restart).
@@ -318,15 +367,24 @@ export function apply(ctx, config = {}) {
         ctx.logger.warn(`llama.cpp: LLAMA_ARG_MODELS_PRESET file not found (${envPreset}); starting without a preset`)
       }
     }
+    const log = openServerLog(ctx.logger)
+    log?.write(`=== ${new Date().toISOString()} starting ${binary} ${args.join(' ')}\n`)
     child = spawn(binary, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, env })
     const relay = chunk => {
-      for (const line of String(chunk).split(/\r?\n/)) if (line.trim()) ctx.logger.debug(`llama.cpp: ${line}`)
+      log?.write(chunk)
+      for (const line of String(chunk).split(/\r?\n/)) {
+        if (!line.trim()) continue
+        // Surface failures in the DSH log; everything else stays at debug.
+        if (/\b(error|failed|fatal)\b/i.test(line)) ctx.logger.warn(`llama.cpp: ${line}`)
+        else ctx.logger.debug(`llama.cpp: ${line}`)
+      }
     }
     child.stdout.on('data', relay)
     child.stderr.on('data', relay)
     child.on('error', err => ctx.logger.error(`llama.cpp: failed to start: ${err.message}`))
     child.on('exit', (code, signal) => {
-      if (!stopped) ctx.logger.warn(`llama.cpp: server exited (code ${code}, signal ${signal})`)
+      if (!stopped) ctx.logger.warn(`llama.cpp: server exited (code ${code}, signal ${signal}); see ${LOG_FILE}`)
+      log?.end(`=== ${new Date().toISOString()} exited (code ${code}, signal ${signal})\n`)
       child = undefined
     })
   }
@@ -377,9 +435,24 @@ export function apply(ctx, config = {}) {
     return () => { clearTimeout(timer); watcher.close() }
   }
 
+  // A preset saved for the first time: llama-server only reads --models-preset
+  // at start, so restart the server we own and start watching the new file.
+  let unwatch = () => {}
+  function presetCreated(file) {
+    if (stopped) return
+    unwatch()
+    unwatch = watchPreset()
+    const c = child
+    if (c && c.exitCode === null) {
+      ctx.logger.info(`llama.cpp: created ${file}; restarting llama-server`)
+      c.once('exit', () => { if (!stopped) start().catch(err => ctx.logger.error(err)) })
+      c.kill('SIGTERM')
+    } else ctx.logger.warn(`llama.cpp: created ${file}; restart DSH so llama-server reads it`)
+  }
+
   ctx.effect(() => {
     start().catch(err => ctx.logger.error(err))
-    const unwatch = watchPreset()
+    unwatch = watchPreset()
     return () => {
       unwatch()
       stopped = true
