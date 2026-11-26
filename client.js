@@ -248,40 +248,40 @@ window.__ModuleLoader__.load({
         }, 'llama-cpp: remote')
 
         // ctx.get throws when the namespace is not mounted; treat that as not mounted.
+        // Both ctx.get and ctx.remote[ns] throw until the remote is mounted
+        // (right after install), so guard both and let calls wait for it.
         const remoteNs = () => {
           try { const v = typeof ctx.get === 'function' && ctx.get('remote.' + REMOTE_NS); if (v) return v } catch {}
-          return ctx.remote && ctx.remote[REMOTE_NS]
+          try { return ctx.remote && ctx.remote[REMOTE_NS] } catch { return undefined }
         }
+        const waitNs = () => new Promise((resolve, reject) => {
+          let n = 0
+          const tick = () => {
+            const ns = remoteNs()
+            if (ns) return resolve(ns)
+            if (++n > 60) return reject(new Error('llama.cpp remote is not mounted yet'))
+            setTimeout(tick, 500)
+          }
+          tick()
+        })
         const api = {
           getInfo() {
-            const ns = remoteNs()
-            if (!ns) return Promise.reject(new Error('llama.cpp remote is not mounted yet'))
-            return ns.getInfo().then(r => { if (!r.ok) throw r.error; return r.value })
+            return waitNs().then(ns => ns.getInfo()).then(r => { if (!r.ok) throw r.error; return r.value })
           },
           readPreset() {
-            const ns = remoteNs()
-            if (!ns) return Promise.reject(new Error('llama.cpp remote is not mounted yet'))
-            return ns.readPreset().then(r => { if (!r.ok) throw r.error; return r.value })
+            return waitNs().then(ns => ns.readPreset()).then(r => { if (!r.ok) throw r.error; return r.value })
           },
           writePreset(text) {
-            const ns = remoteNs()
-            if (!ns) return Promise.reject(new Error('llama.cpp remote is not mounted yet'))
-            return ns.writePreset(text).then(r => { if (!r.ok) throw r.error; return r.value })
+            return waitNs().then(ns => ns.writePreset(text)).then(r => { if (!r.ok) throw r.error; return r.value })
           },
           setLlamaPath(...args) {
-            const ns = remoteNs()
-            if (!ns) return Promise.reject(new Error('llama.cpp remote is not mounted yet'))
-            return ns.setLlamaPath(...args).then(r => { if (!r.ok) throw r.error; return r.value })
+            return waitNs().then(ns => ns.setLlamaPath(...args)).then(r => { if (!r.ok) throw r.error; return r.value })
           },
           clearLlamaPath(...args) {
-            const ns = remoteNs()
-            if (!ns) return Promise.reject(new Error('llama.cpp remote is not mounted yet'))
-            return ns.clearLlamaPath(...args).then(r => { if (!r.ok) throw r.error; return r.value })
+            return waitNs().then(ns => ns.clearLlamaPath(...args)).then(r => { if (!r.ok) throw r.error; return r.value })
           },
           readLog() {
-            const ns = remoteNs()
-            if (!ns) return Promise.reject(new Error('llama.cpp remote is not mounted yet'))
-            return ns.readLog().then(r => { if (!r.ok) throw r.error; return r.value })
+            return waitNs().then(ns => ns.readLog()).then(r => { if (!r.ok) throw r.error; return r.value })
           },
         }
 
