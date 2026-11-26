@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { createWriteStream, existsSync, mkdirSync, readFileSync, statSync, watch, writeFileSync } from 'node:fs'
+import { createWriteStream, existsSync, mkdirSync, readFileSync, statSync, unlinkSync, watch, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, delimiter, dirname, join } from 'node:path'
 
@@ -8,6 +8,11 @@ import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 
 const REMOTE_NS = 'llamaCpp'
 const LOG_FILE = join(homedir(), '.dsh', 'llama-cpp', 'llama-server.log')
+const SETTINGS_FILE = join(homedir(), '.dsh', 'llama-cpp', 'settings.json')
+/** The llama.cpp folder (or executable) picked on the detail page, if any. */
+function readCustom() {
+  try { const v = JSON.parse(readFileSync(SETTINGS_FILE, 'utf8')).llamaPath; return typeof v === 'string' && v.trim() ? v.trim() : undefined } catch { return undefined }
+}
 
 /** Open the server log, replacing the previous run's output. */
 function openServerLog(logger) {
@@ -29,10 +34,38 @@ function locate(configured, detect) {
   return found ? { path: found, source: 'auto', exists: true } : { path: '', source: 'none', exists: false }
 }
 
+/** Expand a leading ~ (GUI apps get values like "~/x" verbatim). */
+const expandHome = p => (p === '~' ? homedir() : p.replace(/^~(?=[\/])/, homedir()))
+
+/**
+ * DSH_LLAMA_CPP_PATH may name the executable itself or a llama.cpp folder:
+ * look for llama-server / llama in it and in build/bin, bin, build/bin/Release.
+ */
+function resolveLlamaPath(value) {
+  const p = expandHome(value)
+  let st
+  try { st = statSync(p) } catch { return undefined }
+  if (st.isFile()) return isExecutable(p) ? p : undefined
+  if (!st.isDirectory()) return undefined
+  const names = isWin ? ['llama-server.exe', 'llama.exe'] : ['llama-server', 'llama']
+  for (const sub of ['', join('build', 'bin'), 'bin', join('build', 'bin', 'Release')]) {
+    for (const name of names) {
+      const file = join(p, sub, name)
+      if (isExecutable(file)) return file
+    }
+  }
+  return undefined
+}
+
 /** If the env var is set, report it (and whether it points to a real file); else auto-detect. */
 function locateEnv(name, detect) {
-  const p = process.env[name]?.trim()
-  if (!p) return locate('', detect)
+  const raw = process.env[name]?.trim()
+  if (!raw) return locate('', detect)
+  if (name === 'DSH_LLAMA_CPP_PATH') {
+    const found = resolveLlamaPath(raw)
+    return { path: found ?? expandHome(raw), source: 'env', env: name, exists: !!found }
+  }
+  const p = expandHome(raw)
   let isFile = false
   try { isFile = statSync(p).isFile() } catch {}
   return { path: p, source: 'env', env: name, exists: isFile }
@@ -43,15 +76,22 @@ function defaultPresetPath() {
   return process.platform === 'win32' ? join(homedir(), '.llama', 'models.user.ini') : join(homedir(), '.config', 'llama', 'models.user.ini')
 }
 
+function customInfo() {
+  const c = readCustom()
+  if (!c) return undefined
+  const f = resolveLlamaPath(c)
+  return { path: f ?? c, dir: c, source: 'custom', exists: !!f }
+}
+
 /** Read-only facts the Models card shows under llama.cpp. */
-function makeInfoService(getConfig, onCreated) {
+function makeInfoService(getConfig, onCreated, onBinaryChanged) {
   class LlamaCppInfo extends TypertRemoteService {
     constructor(ctx) { super(ctx, REMOTE_NS) }
     getInfo() {
       const config = getConfig()
       return {
         platform: process.platform,
-        binary: locateEnv('LLAMA_SERVER_PATH', detectBinary),
+        binary: customInfo() ?? locateEnv('DSH_LLAMA_CPP_PATH', detectBinary),
         preset: locateEnv('LLAMA_ARG_MODELS_PRESET', detectPreset),
       }
     }
@@ -75,6 +115,22 @@ function makeInfoService(getConfig, onCreated) {
       if (created) onCreated?.(file)
       return { ok: true, path: file, created }
     }
+    /** Use a llama.cpp folder (or executable) picked on the detail page. */
+    setLlamaPath(path) {
+      if (typeof path !== 'string' || !path.trim()) return { ok: false, error: 'no path' }
+      const found = resolveLlamaPath(path.trim())
+      if (!found) return { ok: false, error: 'not found' }
+      try { mkdirSync(dirname(SETTINGS_FILE), { recursive: true }); writeFileSync(SETTINGS_FILE, JSON.stringify({ llamaPath: path.trim() }, null, 2) + '\n') }
+      catch (err) { return { ok: false, error: String(err?.message ?? err) } }
+      onBinaryChanged?.('custom llama.cpp path set')
+      return { ok: true, path: found }
+    }
+    /** Back to DSH_LLAMA_CPP_PATH or auto-detection. */
+    clearLlamaPath() {
+      try { unlinkSync(SETTINGS_FILE) } catch {}
+      onBinaryChanged?.('custom llama.cpp path cleared')
+      return { ok: true }
+    }
     /** The last 200 lines of this run's llama-server output. */
     readLog() {
       try {
@@ -89,7 +145,7 @@ function makeInfoService(getConfig, onCreated) {
   }
   Object.defineProperty(LlamaCppInfo.prototype, REMOTE_METHOD_DESCRIPTOR, {
     configurable: true,
-    value: Object.freeze({ version: 1, methods: Object.freeze([Object.freeze({ method: 'getInfo', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'readLog', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'readPreset', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'writePreset', invocation: Object.freeze({ kind: 'direct' }) })]) }),
+    value: Object.freeze({ version: 1, methods: Object.freeze([Object.freeze({ method: 'getInfo', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'readLog', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'readPreset', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'writePreset', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'setLlamaPath', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'clearLlamaPath', invocation: Object.freeze({ kind: 'direct' }) })]) }),
   })
   return LlamaCppInfo
 }
@@ -121,9 +177,12 @@ function isExecutable(file) {
 /** Find llama-server or llama on PATH, then in common install dirs. */
 export function detectBinary() {
   // An explicit path wins over everything else.
-  const override = process.env.LLAMA_SERVER_PATH?.trim()
+  // A folder picked on the detail page wins, then DSH_LLAMA_CPP_PATH.
+  const custom = readCustom()
+  if (custom) return resolveLlamaPath(custom)
+  const override = process.env.DSH_LLAMA_CPP_PATH?.trim()
   // Set but invalid: don't fall back, so the card and the running server agree.
-  if (override) return isExecutable(override) ? override : undefined
+  if (override) return resolveLlamaPath(override)
   const names = isWin ? ['llama-server.exe', 'llama.exe'] : ['llama-server', 'llama']
   const dirs = [
     ...(process.env.PATH ?? '').split(delimiter).filter(Boolean),
@@ -321,7 +380,7 @@ export function apply(ctx, config = {}) {
   const baseURL = `http://${host}:${port}/v1`
 
   // Read-only Remote the Models card uses to show where llama was found.
-  ctx.plugin(makeInfoService(() => config, file => presetCreated(file)))
+  ctx.plugin(makeInfoService(() => config, file => presetCreated(file), why => restartServer(why)))
 
   // At boot the llm service may not exist yet; wait for it instead of
   // reading it once (which silently skipped the offer after a restart).
@@ -438,6 +497,17 @@ export function apply(ctx, config = {}) {
   // A preset saved for the first time: llama-server only reads --models-preset
   // at start, so restart the server we own and start watching the new file.
   let unwatch = () => {}
+  // The executable changed: restart the server we own with the new one.
+  function restartServer(why) {
+    if (stopped) return
+    ctx.logger.info(`llama.cpp: ${why}; restarting llama-server`)
+    const c = child
+    if (c && c.exitCode === null) {
+      c.once('exit', () => { if (!stopped) start().catch(err => ctx.logger.error(err)) })
+      c.kill('SIGTERM')
+    } else start().catch(err => ctx.logger.error(err))
+  }
+
   function presetCreated(file) {
     if (stopped) return
     unwatch()

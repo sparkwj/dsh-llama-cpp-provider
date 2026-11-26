@@ -18,7 +18,7 @@ window.__ModuleLoader__.load({
     const INSTALL_URL = 'https://github.com/ggml-org/llama.cpp#quick-start'
     const CMD_MAC = 'curl -LsSf https://llama.app/install.sh | sh'
     const CMD_WIN = 'irm https://llama.app/install.ps1 | iex'
-    const isFound = item => !!item && (item.source === 'auto' || (item.source === 'env' && item.exists))
+    const isFound = item => !!item && (item.source === 'auto' || ((item.source === 'env' || item.source === 'custom') && item.exists))
 
     const zh = {
       title: 'llama.cpp 本地服务',
@@ -40,6 +40,11 @@ window.__ModuleLoader__.load({
       copy: '复制',
       copied: '已复制',
       installAfter: '在终端里运行后，重新打开 DSH。',
+      binCustomize: '自定义…',
+      binRevert: '还原',
+      binCustomFrom: '自定义目录：{path}',
+      binCustomInvalid: '这个目录里没有找到 llama-server 或 llama：{path}',
+      binPickFailed: '无法选择目录：{error}',
       logTitle: 'llama-server 日志',
       logNone: '还没有日志。llama 服务由本插件启动后才会写入。',
       logTruncated: '只显示最后 200 行。',
@@ -74,6 +79,11 @@ window.__ModuleLoader__.load({
       copy: 'Copy',
       copied: 'Copied',
       installAfter: 'Run it in a terminal, then reopen DSH.',
+      binCustomize: 'Customize…',
+      binRevert: 'Reset',
+      binCustomFrom: 'Custom folder: {path}',
+      binCustomInvalid: 'No llama-server or llama in this folder: {path}',
+      binPickFailed: 'Could not pick a folder: {error}',
       logTitle: 'llama-server log',
       logNone: 'No log yet. It is written once this plugin starts the llama server.',
       logTruncated: 'Showing the last 200 lines.',
@@ -128,6 +138,22 @@ window.__ModuleLoader__.load({
         invocation: { kind: 'direct' },
         parameters: [{ wire: 'text', codec: { mode: 'strict', typeSymbol: PKG + '#writePreset:text', create: () => IDENTITY_SCHEMA } }],
         result: { mode: 'strict', typeSymbol: PKG + '#writePreset:result', create: () => IDENTITY_SCHEMA },
+      }, {
+        id: PKG + '#' + REMOTE_NS + '/setLlamaPath',
+        service: REMOTE_NS,
+        namespace: REMOTE_NS,
+        method: 'setLlamaPath',
+        invocation: { kind: 'direct' },
+        parameters: [{ wire: 'path', codec: { mode: 'strict', typeSymbol: PKG + '#setLlamaPath:path', create: () => IDENTITY_SCHEMA } }],
+        result: { mode: 'strict', typeSymbol: PKG + '#setLlamaPath:result', create: () => IDENTITY_SCHEMA },
+      }, {
+        id: PKG + '#' + REMOTE_NS + '/clearLlamaPath',
+        service: REMOTE_NS,
+        namespace: REMOTE_NS,
+        method: 'clearLlamaPath',
+        invocation: { kind: 'direct' },
+        parameters: [],
+        result: { mode: 'strict', typeSymbol: PKG + '#clearLlamaPath:result', create: () => IDENTITY_SCHEMA },
       }],
     }
 
@@ -206,7 +232,7 @@ window.__ModuleLoader__.load({
     }
 
     return {
-      inject: ['slots', 'locale', 'remote'],
+      inject: ['slots', 'locale', 'remote', 'uiWorkspace'],
       apply(ctx) {
         const t = ctx.locale.bind(NS)
         ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'llama-cpp: dictionaries')
@@ -241,6 +267,16 @@ window.__ModuleLoader__.load({
             const ns = remoteNs()
             if (!ns) return Promise.reject(new Error('llama.cpp remote is not mounted yet'))
             return ns.writePreset(text).then(r => { if (!r.ok) throw r.error; return r.value })
+          },
+          setLlamaPath(...args) {
+            const ns = remoteNs()
+            if (!ns) return Promise.reject(new Error('llama.cpp remote is not mounted yet'))
+            return ns.setLlamaPath(...args).then(r => { if (!r.ok) throw r.error; return r.value })
+          },
+          clearLlamaPath(...args) {
+            const ns = remoteNs()
+            if (!ns) return Promise.reject(new Error('llama.cpp remote is not mounted yet'))
+            return ns.clearLlamaPath(...args).then(r => { if (!r.ok) throw r.error; return r.value })
           },
           readLog() {
             const ns = remoteNs()
@@ -405,27 +441,48 @@ window.__ModuleLoader__.load({
             ? h('path', { d: 'M4.3 7.2l1.8 1.8 3.6-3.8', fill: 'none', stroke: 'currentColor', strokeWidth: 1.4, strokeLinecap: 'round', strokeLinejoin: 'round' })
             : h('path', { d: 'M7 4v3.6M7 9.6v.1', fill: 'none', stroke: 'currentColor', strokeWidth: 1.4, strokeLinecap: 'round' }))
 
-        // llama-server row: its path, or the install command with a copy button.
+        // llama-server row: its path or the install command; Customize… / Reset on the right.
         function BinarySection({ t }) {
           const [info, setInfo] = React.useState(null)
           const [copied, setCopied] = React.useState(false)
-          React.useEffect(() => { api.getInfo().then(setInfo, err => console.error('[llama.cpp] getInfo failed', err)) }, [])
+          const [busy, setBusy] = React.useState(false)
+          const [error, setError] = React.useState(null)
+          const load = React.useCallback(() => api.getInfo().then(setInfo, err => console.error('[llama.cpp] getInfo failed', err)), [])
+          React.useEffect(() => { load() }, [load])
           if (!info) return null
-          const found = isFound(info.binary)
+          const bin = info.binary || {}
+          const found = isFound(bin)
+          const custom = bin.source === 'custom'
           const cmd = info.platform === 'win32' ? CMD_WIN : CMD_MAC
+          const danger = 'var(--dsw-color-danger, #d33)'
           const copy = () => {
             Promise.resolve(navigator.clipboard && navigator.clipboard.writeText(cmd)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) }, () => {})
           }
+          const done = p => p.then(load).catch(err => setError(String(err?.message ?? err))).finally(() => setBusy(false))
+          const customize = () => {
+            setError(null)
+            Promise.resolve(ctx.uiWorkspace.pickDirectory()).then(dir => {
+              if (!dir) return
+              setBusy(true)
+              return done(api.setLlamaPath(dir).then(r => { if (!r || !r.ok) throw new Error(fill(t('binCustomInvalid'), { path: dir })) }))
+            }, err => setError(fill(t('binPickFailed'), { error: String(err?.message ?? err) })))
+          }
+          const revert = () => { setError(null); setBusy(true); done(api.clearLlamaPath()) }
+          let detail
+          if (found) detail = h('span', { style: { ...code, color: secondary } }, bin.path)
+          else if (custom) detail = h('span', { style: { ...code, color: danger } }, fill(t('binCustomInvalid'), { path: bin.dir || bin.path }))
+          else detail = h('span', { style: { ...code, color: secondary } }, fill(t('installCmd'), { cmd }), ' ',
+            h('a', { href: '#', onClick: e => { e.preventDefault(); copy() }, style: { fontFamily: 'inherit', whiteSpace: 'nowrap', cursor: 'pointer' } }, copied ? t('copied') : t('copy')))
           return h('section', { style: sectionStyle },
             h('div', { style: { display: 'flex', alignItems: 'flex-start', gap: 8 } },
               statusIcon(found),
               h('div', { style: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 } },
                 h('span', { style: { fontSize: 13, fontWeight: 600 } }, 'llama-server'),
-                found
-                  ? h('span', { style: { ...code, color: secondary } }, info.binary.path)
-                  : h('span', { style: { ...code, color: secondary } }, fill(t('installCmd'), { cmd })),
-                found ? null : h('span', { style: { ...muted } }, t('installAfter'))),
-              found ? null : h('button', { type: 'button', onClick: copy, style: { fontSize: 12, cursor: 'pointer', flexShrink: 0, alignSelf: 'center' } }, copied ? t('copied') : t('copy'))))
+                detail,
+                custom && found ? h('span', { style: muted }, fill(t('binCustomFrom'), { path: bin.dir })) : null,
+                !found && !custom ? h('span', { style: muted }, t('installAfter')) : null,
+                error ? h('span', { style: { ...muted, color: danger } }, error) : null),
+              h('button', { type: 'button', disabled: busy, onClick: custom ? revert : customize, style: { fontSize: 12, cursor: 'pointer', flexShrink: 0, alignSelf: 'center' } }, custom ? t('binRevert') : t('binCustomize'))))
         }
 
         function PresetSection({ t }) {
