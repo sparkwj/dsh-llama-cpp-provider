@@ -11,17 +11,22 @@
   },
   "files": [
     "index.js",
+    "adapter.js",
     "client.js",
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",
     "README.md",
     "docs",
-    "LICENSE"
+    "LICENSE",
+    "README.zh-CN.md"
   ],
   "peerDependencies": {
     "@deepseek-ai/schemastery": "*",
-    "@deepseek-ai/dsh-typert-protocol": "*"
+    "@deepseek-ai/dsh-typert-protocol": "*",
+    "@deepseek-ai/dsh-llm-pi-ai": "*",
+    "@deepseek-ai/dsh-llm": "*",
+    "@earendil-works/pi-ai": "*"
   },
   "dsh": {
     "bundle": {

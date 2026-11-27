@@ -1,13 +1,16 @@
-在 DSH 里直接用你电脑上的本地模型。打开 DSH 时 llama.cpp 自动启动，关掉 DSH 时一起退出。选中模型就会自动加载，无需联网，无需密钥。
+你电脑上的模型，就在 DSH 里。
 
-## 开始使用
+打开 DSH，llama.cpp 就已就绪。选一个模型，开始对话。不用配置，不用密钥，对话只留在这台电脑上。
 
-1. 安装 llama.cpp，然后重新打开 DSH。
-   - **macOS**：`curl -LsSf https://llama.app/install.sh | sh`
-   - **Windows**（PowerShell）：`irm https://llama.app/install.ps1 | iex`
-2. 前往「设置」>「模型」>「添加模型供应商」，在「第三方模型供应商」中选择 **llama.cpp**。
-3. 点按「获取可用模型」，然后点按「保存」。
+## 只看你想要的
 
-想调整模型参数，编辑 llama.cpp 的 `models.user.ini`，改完自动生效。
+在「设置」>「模型」里点 llama.cpp 的「编辑」，关掉不用的模型。立即生效。
 
-环境变量、常见问题等更多说明：[GitHub](https://github.com/sparkwj/dsh-llama-cpp-provider#readme)
+## 开始之前
+
+先装好 llama.cpp，再重新打开 DSH。
+
+- **macOS**：`curl -LsSf https://llama.app/install.sh | sh`
+- **Windows**：`irm https://llama.app/install.ps1 | iex`
+
+更多玩法：[GitHub](https://github.com/sparkwj/dsh-llama-cpp-provider#readme)

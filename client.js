@@ -11,8 +11,6 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PKG = 'dsh-llama-cpp-provider'
-    const ROUTE = 'llama.dsh'
-    const PI_AI_NS = 'llm-pi-ai'
     const NS = 'llama-cpp'
     const REMOTE_NS = 'llamaCpp'
     const INSTALL_URL = 'https://github.com/ggml-org/llama.cpp#quick-start'
@@ -21,6 +19,18 @@ window.__ModuleLoader__.load({
     const isFound = item => !!item && (item.source === 'auto' || ((item.source === 'env' || item.source === 'custom') && item.exists))
 
     const zh = {
+      modelsAllLabel: '全部',
+      modelsTitle: "模型",
+      modelsHint: "勾选的模型会出现在模型选择器里。",
+      modelsRefresh: "刷新列表",
+      modelsSave: "保存",
+      modelsRevert: "撤销",
+      modelsSaved: "已保存",
+      modelsEmpty: "llama-server 没有返回模型。",
+      modelsOffline: "连不上 llama-server，只显示已隐藏的模型。",
+      modelsAll: "全选",
+      modelsNone: "全不选",
+      modelsCount: "已选 {n} / {total}",
       title: 'llama.cpp 本地服务',
       binary: 'llama 命令',
       preset: 'models-preset 文件',
@@ -60,6 +70,18 @@ window.__ModuleLoader__.load({
       presetLoadDisk: '载入新内容',
     }
     const en = {
+      modelsAllLabel: 'All models',
+      modelsTitle: "Models",
+      modelsHint: "Checked models appear in the model picker.",
+      modelsRefresh: "Refresh list",
+      modelsSave: "Save",
+      modelsRevert: "Revert",
+      modelsSaved: "Saved",
+      modelsEmpty: "llama-server returned no models.",
+      modelsOffline: "Cannot reach llama-server; showing hidden models only.",
+      modelsAll: "Select all",
+      modelsNone: "Select none",
+      modelsCount: "{n} of {total} selected",
       title: 'llama.cpp local server',
       binary: 'llama executable',
       preset: 'models-preset file',
@@ -154,6 +176,24 @@ window.__ModuleLoader__.load({
         invocation: { kind: 'direct' },
         parameters: [],
         result: { mode: 'strict', typeSymbol: PKG + '#clearLlamaPath:result', create: () => IDENTITY_SCHEMA },
+      },
+      {
+        id: PKG + '#' + REMOTE_NS + '/listModels',
+        service: REMOTE_NS,
+        namespace: REMOTE_NS,
+        method: 'listModels',
+        invocation: { kind: 'direct' },
+        parameters: [],
+        result: { mode: 'strict', typeSymbol: PKG + '#listModels:result', create: () => IDENTITY_SCHEMA },
+      },
+      {
+        id: PKG + '#' + REMOTE_NS + '/setHiddenModels',
+        service: REMOTE_NS,
+        namespace: REMOTE_NS,
+        method: 'setHiddenModels',
+        invocation: { kind: 'direct' },
+        parameters: [{ wire: 'ids', codec: { mode: 'strict', typeSymbol: PKG + '#setHiddenModels:ids', create: () => IDENTITY_SCHEMA } }],
+        result: { mode: 'strict', typeSymbol: PKG + '#setHiddenModels:result', create: () => IDENTITY_SCHEMA },
       }],
     }
 
@@ -211,25 +251,6 @@ window.__ModuleLoader__.load({
       ])
     }
 
-    // Show on the add-provider draft (configured is false), and on a saved
-    // row only while its editor is open: the editor is then rendered right
-    // after this slot area inside the card.
-    function useEditorOpen(anchor, enabled) {
-      const [open, setOpen] = React.useState(false)
-      React.useEffect(() => {
-        let el = anchor.current
-        if (!enabled || !el) return
-        while (el.parentElement && el.parentElement.tagName !== 'LI') el = el.parentElement
-        const card = el.parentElement
-        if (!card) return
-        const check = () => setOpen(!!el.nextElementSibling)
-        check()
-        const mo = new MutationObserver(check)
-        mo.observe(card, { childList: true })
-        return () => mo.disconnect()
-      }, [enabled])
-      return open
-    }
 
     return {
       inject: ['slots', 'locale', 'remote', 'uiWorkspace'],
@@ -280,44 +301,18 @@ window.__ModuleLoader__.load({
           clearLlamaPath(...args) {
             return waitNs().then(ns => ns.clearLlamaPath(...args)).then(r => { if (!r.ok) throw r.error; return r.value })
           },
+          listModels() {
+            return waitNs().then(ns => ns.listModels()).then(r => { if (!r.ok) throw r.error; return r.value })
+          },
+          setHiddenModels(ids) {
+            return waitNs().then(ns => ns.setHiddenModels(ids)).then(r => { if (!r.ok) throw r.error; return r.value })
+          },
           readLog() {
             return waitNs().then(ns => ns.readLog()).then(r => { if (!r.ok) throw r.error; return r.value })
           },
         }
 
-        // On the add-provider draft the page renders this area after the
-        // editor; move it visually above the editor (CSS order only, React's
-        // DOM is left untouched) so it matches the edit card.
-        function useAboveEditor(anchor, enabled) {
-          React.useEffect(() => {
-            let el = anchor.current
-            if (!enabled || !el) return
-            while (el.parentElement && !el.previousElementSibling) el = el.parentElement
-            const editor = el.previousElementSibling
-            const panel = el.parentElement
-            if (!editor || !panel) return
-            const saved = { display: panel.style.display, dir: panel.style.flexDirection, editor: editor.style.order, el: el.style.order }
-            if (getComputedStyle(panel).display !== 'flex') { panel.style.display = 'flex'; panel.style.flexDirection = 'column' }
-            editor.style.order = '2'
-            el.style.order = '1'
-            return () => {
-              panel.style.display = saved.display
-              panel.style.flexDirection = saved.dir
-              editor.style.order = saved.editor
-              el.style.order = saved.el
-            }
-          }, [enabled])
-        }
 
-        function Extra(props) {
-          const anchor = React.useRef(null)
-          const mine = !!props.provider && props.provider.provider === ROUTE
-          const draft = props.configured === false
-          const editorOpen = useEditorOpen(anchor, mine && !draft)
-          useAboveEditor(anchor, mine && draft)
-          if (!mine) return null
-          return h('div', { ref: anchor }, draft || editorOpen ? h(Info, { api, t: props.t || t }) : null)
-        }
 
         // Plugin detail page: this run's llama-server output, refreshed every 3 s.
         function LogPanel({ t }) {
@@ -505,9 +500,116 @@ window.__ModuleLoader__.load({
           h(PresetSection, { t }),
           h(LogPanel, { t }))))), 'llama-cpp: detail page')
 
+
+        // Own route (llama-cpp): the Models row is registered by this plugin,
+        // so the page offers Edit but no Delete. While the official editor is
+        // open, hide its generic shell and show the model checklist instead
+        // (same approach as dsh-commandcode-provider's card).
+        const OWN_ROUTE = 'llama-cpp'
+        const OWN_NS = 'llama-cpp-provider'
+        function useOfficialEditor(anchor, enabled) {
+          const [open, setOpen] = React.useState(false)
+          React.useEffect(() => {
+            const root = anchor.current
+            if (!enabled || !root || typeof MutationObserver === 'undefined') return
+            const wrapper = root.closest('[data-slot="settings.models.provider-card"]') || root.parentElement
+            const parent = wrapper && wrapper.parentElement
+            if (!parent) return
+            let hidden = null
+            const find = () => {
+              for (const sib of [wrapper.previousElementSibling, wrapper.nextElementSibling]) {
+                if (sib && typeof sib.className === 'string' && sib.className.includes('editor')) return sib
+              }
+              return null
+            }
+            const sync = () => {
+              const ed = find()
+              if (ed) { if (ed.style.display !== 'none') ed.style.display = 'none'; hidden = ed }
+              else if (hidden) { hidden = null }
+              setOpen(!!ed)
+            }
+            sync()
+            const mo = new MutationObserver(sync)
+            mo.observe(parent, { childList: true })
+            return () => { mo.disconnect(); if (hidden) hidden.style.display = '' }
+          }, [enabled])
+          return open
+        }
+        // DSH's own Button when the primitives module is reachable, so the card
+        // matches the rest of Settings; a plain button otherwise.
+        let UiButton = null, UiSwitch = null
+        try { const p = require('@deepseek-ai/dsh-client-ui-primitives'); UiButton = p.Button || null; UiSwitch = p.Switch || null } catch {}
+        // DSH's Switch when available; a styled checkbox otherwise.
+        const Toggle = ({ checked, label, onChange }) => UiSwitch
+          ? h(UiSwitch, { checked, label, onChange: next => onChange(typeof next === 'boolean' ? next : next && next.target && typeof next.target.checked === 'boolean' ? next.target.checked : !checked) })
+          : h('input', { type: 'checkbox', role: 'switch', checked, 'aria-label': label, onChange: e => onChange(e.target.checked), style: { margin: 0 } })
+        const Btn = ({ onClick, disabled, children }) => UiButton
+          ? h(UiButton, { onClick, disabled }, children)
+          : h('button', { type: 'button', onClick, disabled, style: { fontSize: 12, cursor: disabled ? 'default' : 'pointer' } }, children)
+
+        function ModelChecklist({ t }) {
+          const [data, setData] = React.useState(null)
+          const [checked, setChecked] = React.useState(new Set())
+          const [status, setStatus] = React.useState('')
+          const load = React.useCallback(() => {
+            setStatus('')
+            return api.listModels().then(v => {
+              setData(v)
+              setChecked(new Set(v.models.filter(m => !m.hidden).map(m => m.id)))
+            }, err => setStatus(String(err?.message ?? err)))
+          }, [])
+          React.useEffect(() => { load() }, [load])
+          if (!data) return h('div', { style: muted }, status || t('loading'))
+          const ids = data.models.map(m => m.id)
+          const n = ids.filter(id => checked.has(id)).length
+          // Every switch saves at once; on failure the list is reloaded from disk.
+          const commit = next => {
+            setChecked(next)
+            setStatus('')
+            api.setHiddenModels(ids.filter(id => !next.has(id))).catch(err => { setStatus(String(err?.message ?? err)); load() })
+          }
+          const toggle = (id, on) => { const s = new Set(checked); on ? s.add(id) : s.delete(id); commit(s) }
+          // DSH buttons pad their label by about 12px; inset the switches by the same.
+          const INSET = 12
+          const row = { display: 'flex', alignItems: 'center', gap: 12, padding: '8px ' + INSET + 'px 8px 0', minHeight: 32 }
+          // Same faint line DSH uses between settings rows.
+          const divider = '1px solid var(--dsw-alias-border-divider, var(--dsw-alias-border-subtle, rgba(127,127,127,.18)))'
+          return h('section', { style: sectionStyle },
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+              h('span', { style: { fontSize: 13, fontWeight: 600, flex: 1 } }, t('modelsTitle')),
+              h(Btn, { onClick: load }, t('modelsRefresh'))),
+            h('div', { style: muted }, data.ok === false ? t('modelsOffline') : t('modelsHint') + ' ' + fill(t('modelsCount'), { n, total: ids.length })),
+            status ? h('div', { style: { ...muted, color: 'var(--dsw-color-danger, #d33)' } }, status) : null,
+            ids.length === 0 ? h('div', { style: muted }, t('modelsEmpty')) : h('div', null,
+              h('div', { style: { display: 'flex', flexDirection: 'column', maxHeight: 360, overflow: 'auto' } },
+                ids.map((id, i) => h('div', { key: id, style: { ...row, ...(i < ids.length - 1 ? { borderBottom: divider } : {}) } },
+                  h('span', { style: { ...code, flex: 1, minWidth: 0 } }, id),
+                  h(Toggle, { checked: checked.has(id), label: id, onChange: on => toggle(id, on) }))))))
+        }
+        function OwnCard(props) {
+          const anchor = React.useRef(null)
+          const mine = !!props.provider && props.provider.provider === OWN_ROUTE
+          const open = useOfficialEditor(anchor, mine)
+          // Closed: take the slot wrapper out of layout so the row is exactly as
+          // tall as every other provider row.
+          React.useLayoutEffect(() => {
+            const root = anchor.current
+            const wrapper = root && (root.closest('[data-slot="settings.models.provider-card"]') || root.parentElement)
+            if (!wrapper) return
+            const prev = wrapper.style.display
+            if (!open) wrapper.style.display = 'contents'
+            return () => { wrapper.style.display = prev }
+          }, [open])
+          if (!mine) return null
+          const tt = props.t || t
+          if (!open) return h('span', { ref: anchor, style: { display: 'none' } })
+          return h('div', { ref: anchor, style: { display: 'flex', flexDirection: 'column', gap: 12 } },
+            h(ModelChecklist, { t: tt }),
+            h(Info, { api, t: tt }))
+        }
         ctx.effect(() => ctx.slots.inject('settings.models.provider-card', () => ctx.slots.register({
-          name: 'settings.models.provider-card', key: PI_AI_NS, locale: NS,
-        }, Extra)), 'llama-cpp: provider card')
+          name: 'settings.models.provider-card', key: OWN_NS, locale: NS,
+        }, OwnCard)), 'llama-cpp: own provider card')
       },
     }
   },

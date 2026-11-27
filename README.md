@@ -1,12 +1,12 @@
 # Llama.cpp Provider for DeepSeek Harness
 
-English | [中文](docs/DETAIL.zh.md)
+English | [中文](README.zh-CN.md)
 
 ![llama.cpp in DSH](docs/preview.png)
 
 ## The models on your computer. Right inside DeepSeek Harness.
 
-llama.cpp makes local models feel like any other model in DSH. It's ready the moment DSH opens, and it quits when DSH does. Pick a model and it loads automatically. No models to manage by hand. No internet. No keys. Your conversations stay on this computer.
+llama.cpp makes local models feel like any other model in DSH. It starts when DSH opens and quits when DSH does. Pick a model and it loads on its own. Your conversations stay on this computer, and no API key is needed.
 
 ## Before you begin
 
@@ -23,23 +23,36 @@ When it's done, reopen DSH.
 
 In DSH, go to Plugins, click Add plugin, and install the npm package `dsh-llama-cpp-provider`.
 
-## Add llama.cpp
+## Start chatting
 
-1. Go to Settings > Models, then click Add model provider.
-2. Under Third-party model provider, choose **llama.cpp**.
-3. Click Fetch available models, then click Save.
+There's nothing to set up. Once the plugin is installed, **llama.cpp** appears in Settings > Models and in the model picker of every session, with every model llama.cpp offers. Choose one and start chatting.
 
-That's it. Choose a model under llama.cpp in any session and start chatting.
+Remove the plugin and llama.cpp disappears from Settings > Models and the model picker.
+
+## Choose which models appear
+
+In Settings > Models, click **Edit** next to llama.cpp. Each model has a switch. Turn off the ones you don't want in the model picker. Changes apply right away, so there's nothing to save.
+
+Added or removed models in llama.cpp? Click **Refresh list**.
+
+The same page also shows where llama.cpp was found. If it isn't installed yet, it shows how to install it.
+
+A model you turn off is remembered by its name. If a model's name changes, for example after you rename its section in `models.user.ini`, it shows up again and you need to turn it off again.
 
 ## Tips
 
-- When you add or edit llama.cpp, its card shows whether llama.cpp is ready. If it isn't installed yet, the card tells you what to do.
-- Want to tune a model? Edit llama.cpp's `models.user.ini` file, and llama.cpp picks it up automatically.
-- The plugin automatically finds llama.cpp already installed on your system. To use a different one, set the `DSH_LLAMA_CPP_PATH` environment variable to the `llama-server` (or `llama`) executable, or to a llama.cpp folder (the plugin looks in it and in `build/bin` and `bin`). Apps opened from the Dock don't read `~/.zshrc` or `~/.zprofile`: on macOS run `launchctl setenv DSH_LLAMA_CPP_PATH /full/path`, then quit and reopen DSH. The plugin's detail page shows which file is in use.
-- Keep models in another folder? Set the `LLAMA_ARG_MODELS_DIR` environment variable to that folder, then reopen DSH. Its models show up alongside the ones you have downloaded.
-- Want a different model preset file? Set the `LLAMA_ARG_MODELS_PRESET` environment variable to its full path, then reopen DSH. It is used instead of `models.user.ini`.
-- Don't see llama.cpp under Third-party model provider after installing the plugin? Reopen DSH.
-- Want a green dot next to llama.cpp? Enter any API key on its card. Local models don't need one, so llama.cpp works either way.
+- **Tune a model**: Edit llama.cpp's `models.user.ini` file. llama.cpp picks up the change on its own.
+- **A model downloads again, or loads the wrong file**: A name like `org/repo:Q4_0` can match more than one file in a Hugging Face repository, and llama.cpp checks online to pick one. To fix this, point the model at a file by adding `model = /full/path/to/file.gguf` to its section in `models.user.ini`. Or add `offline = true` under `[*]` so llama.cpp never goes online. Remove that line again when you want to download a new model.
+- **Use a different llama.cpp**: The plugin finds the llama.cpp installed on your computer. To use another one, click Customize… on the plugin's detail page and choose its folder. You can also set the `DSH_LLAMA_CPP_PATH` environment variable to the `llama-server` (or `llama`) executable, or to its folder; the plugin also looks in `build/bin` and `bin` inside it. On macOS, apps opened from the Dock don't read `~/.zshrc` or `~/.zprofile`, so run `launchctl setenv DSH_LLAMA_CPP_PATH /full/path`, then quit and reopen DSH. The detail page shows which file is in use.
+- **Keep models in another folder**: Set the `LLAMA_ARG_MODELS_DIR` environment variable to that folder, then reopen DSH. Its models show up alongside the ones you've downloaded.
+- **Use a different preset file**: Set the `LLAMA_ARG_MODELS_PRESET` environment variable to its full path, then reopen DSH. llama.cpp uses it instead of `models.user.ini`.
+- **llama.cpp doesn't appear after you install the plugin**: Reopen DSH.
+
+## Upgrading from 0.3.11 or earlier
+
+- llama.cpp is now added for you. If you added it by hand before, remove that old entry in Settings > Models.
+- Model names now start with `llama-cpp/` instead of `llama.dsh/`. In sessions that used llama.cpp, pick the model again.
+- The plugin talks to llama.cpp through a package built into DSH. If a DSH update changes that package, you may need to update the plugin too.
 
 ## License
 

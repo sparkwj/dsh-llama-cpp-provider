@@ -5,10 +5,24 @@ import { basename, delimiter, dirname, join } from 'node:path'
 
 import z from '@deepseek-ai/schemastery'
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { notifyHiddenChanged, registerLlamaRoute } from './adapter.js'
+
+const ENTRY_ID = 'llama-cpp-provider'
 
 const REMOTE_NS = 'llamaCpp'
 const LOG_FILE = join(homedir(), '.dsh', 'llama-cpp', 'llama-server.log')
 const SETTINGS_FILE = join(homedir(), '.dsh', 'llama-cpp', 'settings.json')
+
+function readSettings() {
+  try { const v = JSON.parse(readFileSync(SETTINGS_FILE, 'utf8')); return v && typeof v === 'object' ? v : {} } catch { return {} }
+}
+function writeSettings(patch) {
+  const next = { ...readSettings(), ...patch }
+  for (const k of Object.keys(next)) if (next[k] === undefined) delete next[k]
+  mkdirSync(dirname(SETTINGS_FILE), { recursive: true })
+  if (Object.keys(next).length) writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2) + '\n')
+  else { try { unlinkSync(SETTINGS_FILE) } catch {} }
+}
 // PID of the llama-server we started. On POSIX it leads its own process group,
 // so the router and the model instances it spawns are stopped together, and a
 // server left over from an earlier run (DSH killed, plugin removed) is found.
@@ -123,7 +137,7 @@ function customInfo() {
 }
 
 /** Read-only facts the Models card shows under llama.cpp. */
-function makeInfoService(getConfig, onCreated, onBinaryChanged) {
+function makeInfoService(getConfig, onCreated, onBinaryChanged, getBaseURL) {
   class LlamaCppInfo extends TypertRemoteService {
     constructor(ctx) { super(ctx, REMOTE_NS) }
     getInfo() {
@@ -159,14 +173,33 @@ function makeInfoService(getConfig, onCreated, onBinaryChanged) {
       if (typeof path !== 'string' || !path.trim()) return { ok: false, error: 'no path' }
       const found = resolveLlamaPath(path.trim())
       if (!found) return { ok: false, error: 'not found' }
-      try { mkdirSync(dirname(SETTINGS_FILE), { recursive: true }); writeFileSync(SETTINGS_FILE, JSON.stringify({ llamaPath: path.trim() }, null, 2) + '\n') }
+      try { mkdirSync(dirname(SETTINGS_FILE), { recursive: true }); writeSettings({ llamaPath: path.trim() }) }
       catch (err) { return { ok: false, error: String(err?.message ?? err) } }
       onBinaryChanged?.('custom llama.cpp path set')
       return { ok: true, path: found }
     }
     /** Back to DSH_LLAMA_CPP_PATH or auto-detection. */
+    /** Every model llama-server lists, and whether it is hidden from the picker. */
+    async listModels() {
+      const hidden = new Set(Array.isArray(readSettings().hiddenModels) ? readSettings().hiddenModels : [])
+      try {
+        const res = await fetch(getBaseURL() + '/models', { signal: AbortSignal.timeout(3000) })
+        const body = await res.json()
+        const ids = (body?.data ?? []).map(x => x?.id).filter(Boolean)
+        return { ok: true, models: ids.map(id => ({ id, hidden: hidden.has(id) })) }
+      } catch (err) {
+        return { ok: false, error: String(err?.message ?? err), models: [...hidden].map(id => ({ id, hidden: true })) }
+      }
+    }
+    /** Save the models hidden from the picker (settings.json hiddenModels). */
+    setHiddenModels(ids) {
+      const list = Array.isArray(ids) ? [...new Set(ids.filter(x => typeof x === 'string'))] : []
+      writeSettings({ hiddenModels: list.length ? list : undefined })
+      notifyHiddenChanged()
+      return { ok: true, hidden: list }
+    }
     clearLlamaPath() {
-      try { unlinkSync(SETTINGS_FILE) } catch {}
+      try { writeSettings({ llamaPath: undefined }) } catch {}
       onBinaryChanged?.('custom llama.cpp path cleared')
       return { ok: true }
     }
@@ -184,7 +217,7 @@ function makeInfoService(getConfig, onCreated, onBinaryChanged) {
   }
   Object.defineProperty(LlamaCppInfo.prototype, REMOTE_METHOD_DESCRIPTOR, {
     configurable: true,
-    value: Object.freeze({ version: 1, methods: Object.freeze([Object.freeze({ method: 'getInfo', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'readLog', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'readPreset', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'writePreset', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'setLlamaPath', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'clearLlamaPath', invocation: Object.freeze({ kind: 'direct' }) })]) }),
+    value: Object.freeze({ version: 1, methods: Object.freeze([Object.freeze({ method: 'getInfo', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'readLog', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'readPreset', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'writePreset', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'setLlamaPath', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'clearLlamaPath', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'listModels', invocation: Object.freeze({ kind: 'direct' }) }), Object.freeze({ method: 'setHiddenModels', invocation: Object.freeze({ kind: 'direct' }) })]) }),
   })
   return LlamaCppInfo
 }
@@ -193,9 +226,11 @@ const isWin = process.platform === 'win32'
 
 export const Config = z.object({
   autostart: z.boolean().default(true),
-  offerProvider: z.boolean().default(true),
-  piAiEntryId: z.string().default('llm-pi-ai'),
   apiKey: z.string(),
+  // Volatile on purpose: the settings service only exposes entries that carry
+  // a volatile field, and the Models page only lists a provider whose
+  // settingsNs it exposes. Edited in place, no plugin restart.
+  hiddenModels: z.array(z.string()).default([]).volatile(),
 })
 
 /** Read a field that may be a volatile reference. */
@@ -203,11 +238,9 @@ const val = (config, key) => {
   const v = config[key]
   return v && typeof v === 'object' && typeof v.get === 'function' ? v.get() : v
 }
-const ROUTE = 'llama.dsh'
 const HOST = '127.0.0.1'
 const PORT = 19931
 const DISPLAY_NAME = 'llama.cpp'
-const PI_AI_NAME = '@deepseek-ai/dsh-llm-pi-ai'
 
 function isExecutable(file) {
   try { return statSync(file).isFile() } catch { return false }
@@ -262,156 +295,6 @@ async function healthy(host, port) {
   } catch { return false }
 }
 
-const hasRoute = raw => !!(raw && typeof raw === 'object' && raw.providers && raw.providers[ROUTE])
-
-/**
- * Offer llama.dsh in Models > Add model provider while it is not configured.
- * The entry is declared on behalf of the llm-pi-ai namespace, so the stock
- * pi-ai editor handles it. Once the user saves it, pi-ai declares the route
- * itself, so this entry is withdrawn first to avoid a duplicate declaration.
- */
-function offerProvider(ctx, config, baseURL) {
-  const llm = ctx.get('llm')
-  if (!llm) return
-  const piAiEntryId = config.piAiEntryId || 'llm-pi-ai'
-  let handle
-
-  const withdraw = () => {
-    if (!handle) return
-    try { handle() } catch {}
-    handle = undefined
-  }
-  const offer = () => {
-    if (handle) return
-    try {
-      handle = llm.registerConfigurableProviders([{
-        provider: ROUTE,
-        displayName: DISPLAY_NAME,
-        settingsNs: piAiEntryId,
-        settingsPath: ['providers', ROUTE],
-        declared: true,
-        defaultBaseURL: baseURL,
-      }])
-    } catch (err) {
-      // Already declared (configured) by pi-ai: nothing to offer.
-      ctx.logger.debug(`llama.cpp: provider offer skipped: ${err?.message ?? err}`)
-    }
-  }
-
-  // The local server's model ids, used when a saved profile lists none.
-  let serverModels = []
-  const loadServerModels = async () => {
-    for (let i = 0; i < 30 && !serverModels.length; i++) {
-      try {
-        const res = await fetch(`${baseURL}/models`, { signal: AbortSignal.timeout(2000) })
-        const body = await res.json()
-        serverModels = (body?.data ?? []).map(m => m?.id).filter(Boolean)
-      } catch {}
-      if (!serverModels.length) await new Promise(r => setTimeout(r, 2000))
-    }
-  }
-  loadServerModels().catch(() => {})
-
-  const piAiFiber = fiber => {
-    const entry = fiber?.entry
-    return entry?.options?.id === piAiEntryId || entry?.options?.name === PI_AI_NAME
-  }
-  const configured = () => {
-    const editor = ctx.get('configEditor')
-    const layer = editor?.configuration().find(c => c.entry?.options?.id === piAiEntryId)
-    if (!layer) return false
-    return hasRoute(layer.override) || hasRoute(layer.inherited)
-  }
-
-  // Model discovery is keyed by namespace and pi-ai owns llm-pi-ai's, so wrap
-  // its function: a llama.dsh draft with no baseURL asks the local server.
-  const map = llm.discoveries
-  if (map instanceof Map) {
-    const wrapped = new WeakSet()
-    const wrap = fn => {
-      if (typeof fn !== 'function' || wrapped.has(fn)) return fn
-      const w = (request, signal) => fn(
-        request?.provider === ROUTE && !request.baseURL
-          ? { ...request, baseURL, api: request.api || 'openai-completions' }
-          : request,
-        signal,
-      )
-      wrapped.add(w)
-      return w
-    }
-    const originalSet = map.set
-    map.set = function (key, value) {
-      return originalSet.call(this, key, key === piAiEntryId ? wrap(value) : value)
-    }
-    if (map.has(piAiEntryId)) originalSet.call(map, piAiEntryId, wrap(map.get(piAiEntryId)))
-    ctx.effect(() => () => { map.set = originalSet })
-  } else {
-    ctx.logger.warn('llama.cpp: cannot hook model discovery; enter the baseURL on the card')
-  }
-
-  // Runs before pi-ai's own volatile update re-declares its directory, so the
-  // route is withdrawn here before pi-ai tries to declare it. A saved
-  // llama.dsh profile without a baseURL gets this plugin's endpoint at runtime.
-  ctx.on('internal/config', (fiber, next) => {
-    let raw = next()
-    if (piAiFiber(fiber)) {
-      if (hasRoute(raw)) {
-        withdraw()
-        const profile = raw.providers[ROUTE]
-        // pi-ai has no catalog for llama.dsh, so every model needs an api;
-        // llama-server speaks OpenAI chat completions.
-        // A local llama-server needs no key, but pi-ai refuses a request with
-        // no auth. Profiles have no apiKey field (only apiKeyEnv), yet pi-ai
-        // accepts an authorization header as auth, so add one at runtime
-        // when the user configured neither a key nor their own header.
-        const hdrs = (profile && profile.headers) || {}
-        const hasAuthHeader = Object.keys(hdrs).some(k => k.toLowerCase() === 'authorization')
-        const needsKey = profile && typeof profile === 'object' && !profile.apiKeyEnv && !hasAuthHeader
-        // pi-ai has no catalog for this route, so a profile saved without a
-        // model list fails validation; fall back to the server's own list.
-        const noModels = !!(profile && typeof profile === 'object'
-          && !(Array.isArray(profile.models) && profile.models.length) && serverModels.length)
-        if (profile && typeof profile === 'object' && (!profile.baseURL || !profile.api || !profile.displayName || needsKey || noModels)) {
-          raw = {
-            ...raw,
-            providers: {
-              ...raw.providers,
-              [ROUTE]: {
-                ...profile,
-                displayName: profile.displayName || DISPLAY_NAME,
-                api: profile.api || 'openai-completions',
-                ...(noModels ? { models: serverModels.map(id => ({ id, name: id })) } : {}),
-                baseURL: profile.baseURL || baseURL,
-                ...(needsKey ? { headers: { ...hdrs, authorization: `Bearer ${config.apiKey || 'llama-local'}` } } : {}),
-              },
-            },
-          }
-        }
-      } else queueMicrotask(() => { if (!configured()) offer() })
-    }
-    return raw
-  })
-
-  // internal/config is a waterfall: earlier listeners wrap later ones, and
-  // pi-ai validates what its next() returns. When pi-ai's listener was added
-  // after this one (pi-ai reloaded after this plugin started), it validated
-  // before this listener filled in api/models. Keep this listener last.
-  const keepLast = () => {
-    const hooks = ctx.events?._hooks?.['internal/config']
-    if (!Array.isArray(hooks)) return
-    const i = hooks.findIndex(h => h?.ctx?.fiber === ctx.fiber)
-    if (i >= 0 && i !== hooks.length - 1) hooks.push(hooks.splice(i, 1)[0])
-  }
-  keepLast()
-  ctx.on('internal/listener', (name) => {
-    if (name === 'internal/config') queueMicrotask(keepLast)
-  })
-
-  if (configured()) return
-  offer()
-  ctx.effect(() => () => withdraw())
-}
-
 export function apply(ctx, config = {}) {
   // Fixed endpoint: llama serve's default port 9931 with a leading 1.
   const host = HOST
@@ -419,13 +302,23 @@ export function apply(ctx, config = {}) {
   const baseURL = `http://${host}:${port}/v1`
 
   // Read-only Remote the Models card uses to show where llama was found.
-  ctx.plugin(makeInfoService(() => config, file => presetCreated(file), why => restartServer(why)))
+  ctx.plugin(makeInfoService(() => config, file => presetCreated(file), why => restartServer(why), () => baseURL))
 
-  // At boot the llm service may not exist yet; wait for it instead of
-  // reading it once (which silently skipped the offer after a restart).
-  if (config.offerProvider !== false) {
-    ctx.inject(['llm'], ctx => offerProvider(ctx, config, baseURL))
-  }
+  // Register llama.cpp as this plugin's own provider route. The llm service
+  // may not exist yet at boot, so wait for it.
+  ctx.inject(['llm'], async ctx => {
+    try {
+      await registerLlamaRoute(ctx, {
+        baseURL,
+        displayName: DISPLAY_NAME,
+        settingsNs: ctx.fiber?.entry?.options?.id || ENTRY_ID,
+        settingsFile: SETTINGS_FILE,
+        apiKey: config.apiKey,
+      })
+    } catch (err) {
+      ctx.logger.warn(`llama.cpp: could not register the provider: ${err?.message ?? err}`)
+    }
+  })
   if (config.autostart === false) return
 
   let child

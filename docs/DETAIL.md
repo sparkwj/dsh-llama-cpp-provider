@@ -1,13 +1,16 @@
-Run the local models on your computer right inside DSH. llama.cpp starts when DSH opens and quits when DSH does. Pick a model and it loads automatically. No internet, no keys.
+The models on your computer. Right inside DSH.
 
-## Get started
+Open DSH and llama.cpp is ready. Pick a model and start chatting. No setup, no keys, and your conversations stay on this computer.
 
-1. Install llama.cpp, then reopen DSH.
-   - **macOS**: `curl -LsSf https://llama.app/install.sh | sh`
-   - **Windows** (PowerShell): `irm https://llama.app/install.ps1 | iex`
-2. Go to Settings > Models > Add model provider, and choose **llama.cpp** under Third-party model provider.
-3. Click Fetch available models, then click Save.
+## Just the models you want
 
-To tune a model, edit llama.cpp's `models.user.ini`; changes apply automatically.
+In Settings > Models, click Edit next to llama.cpp and switch off the ones you don't use. Changes apply instantly.
 
-Environment variables, troubleshooting and more: [GitHub](https://github.com/sparkwj/dsh-llama-cpp-provider#readme)
+## Before you begin
+
+Install llama.cpp, then reopen DSH.
+
+- **macOS**: `curl -LsSf https://llama.app/install.sh | sh`
+- **Windows**: `irm https://llama.app/install.ps1 | iex`
+
+More: [GitHub](https://github.com/sparkwj/dsh-llama-cpp-provider#readme)
