@@ -48,12 +48,6 @@ A model you turn off is remembered by its name. If a model's name changes, for e
 - **Use a different preset file**: Set the `LLAMA_ARG_MODELS_PRESET` environment variable to its full path, then reopen DSH. llama.cpp uses it instead of `models.user.ini`.
 - **llama.cpp doesn't appear after you install the plugin**: Reopen DSH.
 
-## Upgrading from 0.3.11 or earlier
-
-- llama.cpp is now added for you. If you added it by hand before, remove that old entry in Settings > Models.
-- Model names now start with `llama-cpp/` instead of `llama.dsh/`. In sessions that used llama.cpp, pick the model again.
-- The plugin talks to llama.cpp through a package built into DSH. If a DSH update changes that package, you may need to update the plugin too.
-
 ## License
 
 [MIT](LICENSE)

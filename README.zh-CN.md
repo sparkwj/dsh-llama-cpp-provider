@@ -48,12 +48,6 @@
 - **换用别的预设文件**：把环境变量 `LLAMA_ARG_MODELS_PRESET` 设为它的完整路径，然后重新打开 DSH。llama.cpp 会用它代替 `models.user.ini`。
 - **装好插件后看不到 llama.cpp**：重新打开 DSH。
 
-## 从 0.3.11 或更早版本升级
-
-- 现在会自动添加 llama.cpp。如果你之前手动添加过，请在「设置」>「模型」里删掉那一条。
-- 模型名称的前缀从 `llama.dsh/` 改成了 `llama-cpp/`。之前用过 llama.cpp 的会话，需要重新选一次模型。
-- 插件通过 DSH 内置的一个包和 llama.cpp 通信。如果 DSH 更新时改动了这个包，插件可能也需要更新。
-
 ## 许可
 
 [MIT](LICENSE)
