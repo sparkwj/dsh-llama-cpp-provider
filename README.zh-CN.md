@@ -42,7 +42,6 @@
 ## 小贴士
 
 - **调整模型参数**：编辑 llama.cpp 的 `models.user.ini`，改完会自动生效。
-- **模型重新下载，或者加载了别的文件**：`org/repo:Q4_0` 这样的名称可能对应 Hugging Face 仓库里的多个文件，llama.cpp 会联网去选。解决办法是在 `models.user.ini` 里这个模型的节下加一行 `model = /文件的完整路径.gguf`，直接指定文件；或者在 `[*]` 下加 `offline = true`，让 llama.cpp 完全不联网。要下载新模型时，再把这一行删掉。
 - **换用其他 llama.cpp**：插件会自动找到电脑上已安装的 llama.cpp。要换用别的，在插件详情页点「自定义…」，选择它所在的文件夹。也可以把环境变量 `DSH_LLAMA_CPP_PATH` 设为 `llama-server`（或 `llama`）可执行文件，或它所在的文件夹；插件还会在这个文件夹下的 `build/bin` 和 `bin` 里查找。在 macOS 上，从程序坞打开的应用不会读取 `~/.zshrc` 或 `~/.zprofile`，所以要运行 `launchctl setenv DSH_LLAMA_CPP_PATH /完整路径`，然后退出并重新打开 DSH。详情页会显示正在使用哪个文件。
 - **模型放在别的文件夹**：把环境变量 `LLAMA_ARG_MODELS_DIR` 设为那个文件夹，然后重新打开 DSH。里面的模型会和你下载的模型一起显示。
 - **换用别的预设文件**：把环境变量 `LLAMA_ARG_MODELS_PRESET` 设为它的完整路径，然后重新打开 DSH。llama.cpp 会用它代替 `models.user.ini`。

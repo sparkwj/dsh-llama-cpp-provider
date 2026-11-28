@@ -42,7 +42,6 @@ A model you turn off is remembered by its name. If a model's name changes, for e
 ## Tips
 
 - **Tune a model**: Edit llama.cpp's `models.user.ini` file. llama.cpp picks up the change on its own.
-- **A model downloads again, or loads the wrong file**: A name like `org/repo:Q4_0` can match more than one file in a Hugging Face repository, and llama.cpp checks online to pick one. To fix this, point the model at a file by adding `model = /full/path/to/file.gguf` to its section in `models.user.ini`. Or add `offline = true` under `[*]` so llama.cpp never goes online. Remove that line again when you want to download a new model.
 - **Use a different llama.cpp**: The plugin finds the llama.cpp installed on your computer. To use another one, click Customize… on the plugin's detail page and choose its folder. You can also set the `DSH_LLAMA_CPP_PATH` environment variable to the `llama-server` (or `llama`) executable, or to its folder; the plugin also looks in `build/bin` and `bin` inside it. On macOS, apps opened from the Dock don't read `~/.zshrc` or `~/.zprofile`, so run `launchctl setenv DSH_LLAMA_CPP_PATH /full/path`, then quit and reopen DSH. The detail page shows which file is in use.
 - **Keep models in another folder**: Set the `LLAMA_ARG_MODELS_DIR` environment variable to that folder, then reopen DSH. Its models show up alongside the ones you've downloaded.
 - **Use a different preset file**: Set the `LLAMA_ARG_MODELS_PRESET` environment variable to its full path, then reopen DSH. llama.cpp uses it instead of `models.user.ini`.
